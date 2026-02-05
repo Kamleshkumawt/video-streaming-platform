@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video upload</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="container">
+        <h1>Upload Video</h1>
+        <form id="upload-form">
+            <input type="file" name="video" accept="video/*" required>
+            <button type="submit">Upload</button>
+        </form>
+
+        <!-- Loader Bar -->
+        <div class="loader-wrapper" id="loader-wrapper" style="display: none;">
+            <div class="loader-bar" id="loader-bar"></div>
+        </div>
+        <div id="percentage" style="display: none;"></div>
+        <br />
+        <a href="/Frontend/Dashboard.html">Back to Dashboard</a>
+    </div>
+
+    <script>
+        const uploadForm = document.getElementById('upload-form');
+        const loaderWrapper = document.getElementById('loader-wrapper');
+        const loaderBar = document.getElementById('loader-bar');
+        const percentage = document.getElementById('percentage');
+
+        // Add event listener to form
+        uploadForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            const formData = new FormData(uploadForm);
+            uploadVideo(formData);
+        });
+
+        // Function to handle video upload with progress
+        async function uploadVideo(formData) {
+            try {
+                loaderWrapper.style.display = 'block'; // Show loader
+                loaderBar.style.width = '0%'; // Reset the loader bar
+                percentage.style.display = 'block'; // Show percentage text
+                percentage.textContent = '0%';
+
+                // Using XMLHttpRequest to track upload progress
+                const xhr = new XMLHttpRequest();
+
+                xhr.open('POST', 'http://localhost:4000/upload', true);
+
+                // Track progress of the upload
+                xhr.upload.addEventListener('progress', (event) => {
+                    if (event.lengthComputable) {
+                        const progress = (event.loaded / event.total) * 100;
+                        loaderBar.style.width = `${progress}%`; // Update the loader bar
+                        percentage.textContent = `${Math.round(progress)}%`; // Update the percentage text
+                    }
+                });
+
+                // On complete, reset the loader
+                xhr.onload = () => {
+                    if (xhr.status === 200) {
+                        console.log('Video uploaded successfully:', xhr.responseText);
+                        // Optionally reset the form and hide loader
+                        uploadForm.reset();
+                        loaderWrapper.style.display = 'none';
+                    } else {
+                        console.error('Error uploading video:', xhr.statusText);
+                    }
+                };
+
+                // On error
+                xhr.onerror = () => {
+                    console.error('Error uploading video');
+                    loaderWrapper.style.display = 'none';
+                };
+
+                // Send the form data
+                xhr.send(formData);
+            } catch (error) {
+                console.error('Error during video upload:', error);
+                loaderWrapper.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+
+</html>

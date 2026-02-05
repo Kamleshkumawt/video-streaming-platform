@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="containerHome">
+        <div class="header">
+            <h1>Video Dashboard</h1>
+            <a href="/Frontend/VideoUpload.html">Upload New Video</a>
+        </div>
+        <div class="video-grid" id="video-grid">
+            <!-- Videos will be dynamically inserted here -->
+        </div>
+    </div>
+
+    <script>
+        // Example videos array for demonstration
+        // const videos = [
+        //     { filename: "Video 1", url: "path_to_video_1.mp4" },
+        //     { filename: "Video 2", url: "path_to_video_2.mp4" }
+        // ];
+
+        // Function to load videos from the server
+        async function loadVideos() {
+            const response = await fetch('http://localhost:4000/video');
+            const data = await response.json();
+            console.log('videos :',data);
+            renderVideos(data.videos);
+            try {
+
+            } catch (err) {
+                console.error("Error loading videos :", err.message);
+            }
+        }
+
+        // Call the loadVideos function to fetch and display videos
+        loadVideos();
+
+        // Function to render videos
+        function renderVideos(videos) {
+            const videoGrid = document.getElementById('video-grid');
+            videos.forEach(video => {
+                const videoItem = document.createElement('div');
+                videoItem.classList.add('video-item');
+                videoItem.innerHTML = `
+                    <h3>${video.filename}</h3>
+                    <video controls>
+                        <source src="http://127.0.0.1:4000${video.url}" type="video/mp4">
+                        Your browser does not support the video tag.
+                    </video>
+                `;
+                videoGrid.appendChild(videoItem);
+            });
+        }
+
+        // Call the renderVideos function to display videos
+        // renderVideos(videos);
+    </script>
+</body>
+
+</html>
