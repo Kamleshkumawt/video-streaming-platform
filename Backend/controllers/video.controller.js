@@ -3,6 +3,20 @@ import Video from "../models/video.model.js";
 import {VIDEOS_DIR } from "../config/config.js";
 import path from "path";
 import fs from "fs";
+import winston from "winston";
+
+const logger = winston.createLogger({
+  level: "info",
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.errors({ stack: true }),
+    winston.format.json()
+  ),
+  transports: [
+    new winston.transports.Console(),
+    // Add file transport for production: new winston.transports.File({ filename: 'logs/app.log' })
+  ],
+});
 
 export const uploadVideoController = async (req, res, next) => {
   upload(req, res, async (err) => {
@@ -19,9 +33,6 @@ export const uploadVideoController = async (req, res, next) => {
       });
     }
 
-
-    console.log('req.file', req.file);
-
     const { filename, originalname, size, mimetype } = req.file;
 
     try {
@@ -35,7 +46,7 @@ export const uploadVideoController = async (req, res, next) => {
       // Save the video metadata to MongoDB
       await newVideo.save();
 
-      console.log(`Video uploaded successfully: ${filename}`);
+      // console.log(`Video uploaded successfully: ${filename}`);
 
       res.status(201).json({
         success: true,
@@ -56,35 +67,53 @@ export const uploadVideoController = async (req, res, next) => {
   });
 };
 
-// Get all videos (retrieve video metadata from MongoDB)
+// Get all videos
 export const getAllVideosController = async (req, res) => {
   try {
-    const videos = await Video.find();
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const videos = await Video.find().skip(skip).limit(limit).sort({ uploadedAt: -1 });
+    const total = await Video.countDocuments();
+
     res.status(200).json({
       success: true,
       message: "Videos retrieved successfully",
       videos,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
     });
   } catch (err) {
-    console.error("Error retrieving videos:", err);
+    logger.error("Error retrieving videos", { error: err.message });
     res.status(500).json({
       success: false,
       message: "Error retrieving videos.",
-      error: err.message,
     });
   }
 };
 
-// Get a specific video by filename (fetch video metadata)
+// Get a specific video by filename
 export const getVideoByFilename = async (req, res) => {
   const { filename } = req.params;
+
+  if (!filename || /[^a-zA-Z0-9._-]/.test(filename)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid filename.",
+    });
+  }
+
   try {
     const video = await Video.findOne({ filename });
-
     if (!video) {
       return res.status(404).json({
         success: false,
-        message: "Video not found",
+        message: "Video not found.",
       });
     }
 
@@ -93,45 +122,72 @@ export const getVideoByFilename = async (req, res) => {
       video,
     });
   } catch (err) {
-    console.error("Error retrieving video:", err);
+    logger.error("Error retrieving video", { error: err.message, filename });
     res.status(500).json({
       success: false,
       message: "Error retrieving video.",
     });
   }
-};
+}
 
-// Function to stream video with range support (for large files)
-export const streamVideo = (req, res) => {
+export const streamVideo = async (req, res) => {
   const { filename } = req.params;
-  const filePath = path.join(VIDEOS_DIR, filename);
 
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).send("Video not found");
+  if (!filename || /[^a-zA-Z0-9._-]/.test(filename)) {
+    return res.status(400).send("Invalid filename.");
   }
 
-  const stat = fs.statSync(filePath);
-  const fileSize = stat.size;
-  const range = req.headers.range;
+  try {
+    const video = await Video.findOne({ filename });
+    if (!video) {
+      return res.status(404).send("Video not found.");
+    }
 
-  if (range) {
-    const parts = range.replace(/bytes=/, "").split("-");
-    const start = parseInt(parts[0], 10);
-    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-    const chunkSize = end - start + 1;
+    const filePath = path.resolve(VIDEOS_DIR, filename); // Safe path resolution
 
-    res.status(206);  // Partial content response for range requests
-    res.setHeader("Content-Range", `bytes ${start}-${end}/${fileSize}`);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).send("Video file not found.");
+    }
+
+    const stat = fs.statSync(filePath);
+    const fileSize = stat.size;
+    const range = req.headers.range;
+
     res.setHeader("Accept-Ranges", "bytes");
-    res.setHeader("Content-Length", chunkSize);
-    res.setHeader("Content-Type", "video/mp4");
+    res.setHeader("Content-Type", video.mimeType); // Use stored MIME type
 
-    const stream = fs.createReadStream(filePath, { start, end });
-    stream.pipe(res);
-  } else {
-    res.status(200);  // Full content response
-    res.setHeader("Content-Length", fileSize);
-    res.setHeader("Content-Type", "video/mp4");
-    fs.createReadStream(filePath).pipe(res);
+    if (range) {
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+
+      if (start >= fileSize || end >= fileSize || start > end) {
+        return res.status(416).send("Range not satisfiable.");
+      }
+
+      const chunkSize = end - start + 1;
+      res.status(206);
+      res.setHeader("Content-Range", `bytes ${start}-${end}/${fileSize}`);
+      res.setHeader("Content-Length", chunkSize);
+
+      const stream = fs.createReadStream(filePath, { start, end });
+      stream.on("error", (err) => {
+        logger.error("Error streaming video", { error: err.message, filename });
+        res.status(500).send("Error streaming video.");
+      });
+      stream.pipe(res);
+    } else {
+      res.status(200);
+      res.setHeader("Content-Length", fileSize);
+      const stream = fs.createReadStream(filePath);
+      stream.on("error", (err) => {
+        logger.error("Error streaming video", { error: err.message, filename });
+        res.status(500).send("Error streaming video.");
+      });
+      stream.pipe(res);
+    }
+  } catch (err) {
+    logger.error("Error in streamVideo", { error: err.message, filename });
+    res.status(500).send("Server error.");
   }
 };

@@ -3,6 +3,7 @@ import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import routes from "./routes/video.route.js";
 import cors from "cors";
+import { errorHandler } from "./middlewares/errorHandler.js";
 
 const app = express();
 
@@ -50,5 +51,8 @@ app.get("/health", (req, res) => {
 app.get("/", (req, res) => {
   res.send("Hello World!");
 });
+
+
+app.use(errorHandler);
 
 export default app;
