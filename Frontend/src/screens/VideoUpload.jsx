@@ -1,12 +1,13 @@
 import React, { useState } from "react";
 import axios from "../config/axios";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 const VideoUpload = () => {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const navigate = useNavigate();
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
@@ -38,6 +39,9 @@ const VideoUpload = () => {
       } else {
         setErrorMessage("Error uploading video. Please try again.");
       }
+      setTimeout(()=>{
+        navigate("/");
+      },1000)
     } catch (error) {
       console.error("Error during video upload:", error);
       setErrorMessage("Unexpected error occurred. Please try again later.");

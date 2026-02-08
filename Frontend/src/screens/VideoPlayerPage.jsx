@@ -39,7 +39,7 @@ const VideoPlayerPage = () => {
             className="w-full h-auto max-h-[70vh] object-contain"
             controls
             preload="metadata"
-            poster="/path/to/poster-image.jpg" // Optional: Add a poster image for better UX
+            // poster="/path/to/poster-image.jpg" // Optional: Add a poster image for better UX
             autoPlay
           >
             <source
